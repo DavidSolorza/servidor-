@@ -26,7 +26,7 @@ export const ProjectsView = () => {
         
         <div className="flex gap-2">
           <button 
-            onClick={refresh}
+            onClick={() => refresh()}
             disabled={isLoading}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm shadow-blue-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
