@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import { httpClient } from '../../../core/http/httpClient';
-import { Activity, Zap, AlertTriangle, Wifi, Server, ArrowDownUp } from 'lucide-react';
+import { socket } from '../../../core/http/socketClient';
+import { Activity, Zap, AlertTriangle, Wifi, Server, ArrowDownUp, Cpu, Database, HardDrive } from 'lucide-react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { format, parseISO } from 'date-fns';
 
 interface MetricsData {
   server: {
@@ -10,77 +13,147 @@ interface MetricsData {
     success_2xx: number;
     client_errors_4xx: number;
     server_errors_5xx: number;
+    by_project?: Record<string, any>;
+  };
+  hardware?: {
+    cpu_percent: number;
+    cpu_cores: number;
+    ram_total_mb: number;
+    ram_used_mb: number;
+    ram_free_mb: number;
+    ram_percent: number;
+    disk_total_gb: number;
+    disk_used_gb: number;
+    disk_free_gb: number;
+    disk_percent: number;
+    process_memory_mb: number;
   };
   tunnel: {
     domain: string;
     ha_connections: number;
-    total_requests: number;
-    total_errors: number;
+    total_requests?: number;
+    total_errors?: number;
     latency_ms: number;
     bytes_received: number;
     bytes_sent: number;
   };
 }
 
+interface HistoryData {
+  timestamp: string;
+  cpu_percent: number;
+  ram_percent: number;
+  total_requests: number;
+  latency_ms: number;
+  timeLabel?: string;
+}
+
 export const MetricsSection = ({ tenantName }: { tenantName: string }) => {
   const [metrics, setMetrics] = useState<MetricsData | null>(null);
+  const [history, setHistory] = useState<HistoryData[]>([]);
   const [tenantStats, setTenantStats] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const fetchMetrics = async () => {
       try {
-        const res = await httpClient.get<any>(`/metrics`);
-        const data = res?.data || res;
+        // Fetch current metrics
+        const res = await httpClient.get<any>(`/system/metrics`);
+        const data = res?.data?.data || res?.data || res;
         
-        if (data && data.server && data.tunnel) {
+        if (data && data.server) {
           setMetrics(data as MetricsData);
-          // Extract tenant specific stats if available
           if (data.server.by_project && data.server.by_project[tenantName]) {
             setTenantStats(data.server.by_project[tenantName]);
           } else {
             setTenantStats(null);
           }
         }
+
+        let histData = [];
+        try {
+          const histRes = await httpClient.get<any>(`/system/metrics/history?limit=30`);
+          histData = histRes?.data?.data || histRes?.data || [];
+        } catch (e) {
+          console.warn('History endpoint returned an error (likely 404). Backend might not be updated yet.');
+        }
+
+        if (Array.isArray(histData)) {
+          // Format timestamps for the chart
+          const formattedHistory = histData.map((pt: any) => {
+            let timeStr = pt.timestamp;
+            try {
+              timeStr = format(parseISO(pt.timestamp.replace(/Z$/, '')), 'HH:mm:ss');
+            } catch (e) {
+              // fallback
+            }
+            return {
+              ...pt,
+              timeLabel: timeStr
+            };
+          }).reverse(); // Ascending order for charts usually
+          setHistory(formattedHistory);
+        }
+
       } catch (error) {
         console.error('Error fetching metrics', error);
-        // Fallback simulado para mantener la UI funcional si falla
-        setMetrics({
-          server: {
-            status: "offline (simulado)",
-            uptime_seconds: 0,
-            total_requests: Math.floor(Math.random() * 100),
-            success_2xx: 0,
-            client_errors_4xx: 2,
-            server_errors_5xx: 1
-          },
-          tunnel: {
-            domain: "https://dashboard.servidor.blog",
-            ha_connections: Math.floor(Math.random() * 5),
-            total_requests: 250,
-            total_errors: 0,
-            latency_ms: Math.floor(Math.random() * 100),
-            bytes_received: 600000,
-            bytes_sent: 1200000
-          }
-        });
       } finally {
         setIsLoading(false);
       }
     };
     
     fetchMetrics();
-    // Refresco automático cada 5 segundos según instrucciones
-    const interval = setInterval(fetchMetrics, 5000);
-    return () => clearInterval(interval);
+    
+    const handleMetricsUpdate = (data: any) => {
+      if (data && data.server) {
+        setMetrics(data as MetricsData);
+        if (data.server.by_project && data.server.by_project[tenantName]) {
+          setTenantStats(data.server.by_project[tenantName]);
+        } else {
+          setTenantStats(null);
+        }
+
+        // Add to history
+        setHistory(prev => {
+          let timeStr = data.timestamp || new Date().toISOString();
+          try {
+            timeStr = format(parseISO(timeStr.replace(/Z$/, '')), 'HH:mm:ss');
+          } catch(e) {}
+          
+          const newPoint = {
+            ...data,
+            total_requests: data.server.total_requests || 0,
+            latency_ms: data.tunnel?.latency_ms || 0,
+            timeLabel: timeStr
+          };
+          
+          const nextHistory = [...prev, newPoint];
+          if (nextHistory.length > 60) return nextHistory.slice(nextHistory.length - 60);
+          return nextHistory;
+        });
+      }
+    };
+
+    socket.on('metrics_update', handleMetricsUpdate);
+
+    return () => {
+      socket.off('metrics_update', handleMetricsUpdate);
+    };
   }, [tenantName]);
 
   if (isLoading && !metrics) {
-    return <div className="animate-pulse h-64 bg-slate-100 rounded-xl border border-slate-200"></div>;
+    return (
+      <div className="flex justify-center items-center h-64 bg-slate-50/50 rounded-xl border border-slate-200">
+        <div className="flex flex-col items-center gap-3 text-slate-500">
+          <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+          <span className="font-medium">Cargando métricas...</span>
+        </div>
+      </div>
+    );
   }
 
   const formatBytes = (bytes: number) => {
-    if (bytes === 0) return '0 B';
+    if (bytes === 0 || !bytes) return '0 B';
     const k = 1024;
     const sizes = ['B', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
@@ -143,8 +216,121 @@ export const MetricsSection = ({ tenantName }: { tenantName: string }) => {
         ))}
       </div>
 
+      {/* Historial (Gráfico) y Hardware */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* Gráfico de Tráfico/Latencia */}
+        <div className="lg:col-span-2 p-6 bg-white border border-slate-200 shadow-sm rounded-xl flex flex-col">
+          <h3 className="text-lg font-bold text-slate-800 mb-4">Evolución de Tráfico y Latencia</h3>
+          <div className="flex-1 min-h-[250px]">
+            {history.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={history} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="colorRequests" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="colorLatency" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <XAxis dataKey="timeLabel" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                  <YAxis yAxisId="left" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                  <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                  <Tooltip 
+                    contentStyle={{ borderRadius: '0.5rem', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                    labelStyle={{ fontWeight: 'bold', color: '#334155' }}
+                  />
+                  <Area yAxisId="left" type="monotone" name="Peticiones Totales" dataKey="total_requests" stroke="#10b981" strokeWidth={2} fillOpacity={1} fill="url(#colorRequests)" />
+                  <Area yAxisId="right" type="monotone" name="Latencia (ms)" dataKey="latency_ms" stroke="#8b5cf6" strokeWidth={2} fillOpacity={1} fill="url(#colorLatency)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex justify-center items-center h-full text-slate-400">
+                Esperando datos históricos...
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Recursos de Hardware */}
+        <div className="p-6 bg-slate-900 border border-slate-800 shadow-lg rounded-xl flex flex-col text-white">
+          <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
+            <Server className="w-5 h-5 text-blue-400" />
+            Recursos del Sistema
+          </h3>
+          
+          <div className="space-y-6 flex-1">
+            {/* CPU */}
+            <div>
+              <div className="flex justify-between text-sm mb-2">
+                <span className="text-slate-300 font-medium flex items-center gap-1.5">
+                  <Cpu className="w-4 h-4 text-emerald-400" /> CPU ({metrics?.hardware?.cpu_cores || 0} Cores)
+                </span>
+                <span className="text-white font-bold">{metrics?.hardware?.cpu_percent || 0}%</span>
+              </div>
+              <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
+                <div className={`h-full rounded-full ${
+                  (metrics?.hardware?.cpu_percent || 0) > 80 ? 'bg-red-500' : 
+                  (metrics?.hardware?.cpu_percent || 0) > 50 ? 'bg-amber-400' : 'bg-emerald-400'
+                }`} style={{ width: `${metrics?.hardware?.cpu_percent || 0}%` }}></div>
+              </div>
+            </div>
+
+            {/* RAM */}
+            <div>
+              <div className="flex justify-between text-sm mb-2">
+                <span className="text-slate-300 font-medium flex items-center gap-1.5">
+                  <Database className="w-4 h-4 text-blue-400" /> Memoria RAM
+                </span>
+                <span className="text-white font-bold">{metrics?.hardware?.ram_percent || 0}%</span>
+              </div>
+              <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden mb-1">
+                <div className={`h-full rounded-full ${
+                  (metrics?.hardware?.ram_percent || 0) > 85 ? 'bg-red-500' : 
+                  (metrics?.hardware?.ram_percent || 0) > 65 ? 'bg-amber-400' : 'bg-blue-400'
+                }`} style={{ width: `${metrics?.hardware?.ram_percent || 0}%` }}></div>
+              </div>
+              <div className="text-[10px] text-slate-400 text-right">
+                {metrics?.hardware?.ram_used_mb ? (metrics.hardware.ram_used_mb / 1024).toFixed(1) : 0} GB / {metrics?.hardware?.ram_total_mb ? (metrics.hardware.ram_total_mb / 1024).toFixed(1) : 0} GB
+              </div>
+            </div>
+
+            {/* Disco */}
+            <div>
+              <div className="flex justify-between text-sm mb-2">
+                <span className="text-slate-300 font-medium flex items-center gap-1.5">
+                  <HardDrive className="w-4 h-4 text-purple-400" /> Disco
+                </span>
+                <span className="text-white font-bold">{metrics?.hardware?.disk_percent || 0}%</span>
+              </div>
+              <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden mb-1">
+                <div className="h-full bg-purple-400 rounded-full" style={{ width: `${metrics?.hardware?.disk_percent || 0}%` }}></div>
+              </div>
+              <div className="text-[10px] text-slate-400 text-right">
+                {metrics?.hardware?.disk_used_gb?.toFixed(1) || 0} GB / {metrics?.hardware?.disk_total_gb?.toFixed(1) || 0} GB
+              </div>
+            </div>
+            
+          </div>
+          
+          <div className="mt-4 pt-4 border-t border-slate-700/50">
+             <div className="flex justify-between items-center text-xs text-slate-400">
+               <span>Proceso Servidor (Flask)</span>
+               <span className="font-mono text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded">
+                 {metrics?.hardware?.process_memory_mb?.toFixed(1) || 0} MB
+               </span>
+             </div>
+          </div>
+        </div>
+
+      </div>
+
       {/* Detalles del Túnel y Servidor */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
         {/* Panel del Túnel Cloudflare */}
         <div className="p-6 bg-white border border-slate-200 shadow-sm rounded-xl flex flex-col">
@@ -154,7 +340,7 @@ export const MetricsSection = ({ tenantName }: { tenantName: string }) => {
             </div>
             <div>
               <h3 className="text-lg font-bold text-slate-800 leading-tight">Túnel de Cloudflare</h3>
-              <p className="text-xs text-slate-500 font-medium">{metrics?.tunnel?.domain}</p>
+              <p className="text-xs text-slate-500 font-medium">{metrics?.tunnel?.domain || 'Desconocido'}</p>
             </div>
           </div>
           
