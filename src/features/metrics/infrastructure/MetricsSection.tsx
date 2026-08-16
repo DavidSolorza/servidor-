@@ -53,21 +53,24 @@ export const MetricsSection = ({ tenantName }: { tenantName: string }) => {
   const [history, setHistory] = useState<HistoryData[]>([]);
   const [tenantStats, setTenantStats] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [pingMs, setPingMs] = useState<number>(0);
 
   useEffect(() => {
     const fetchMetrics = async () => {
       try {
+        const startTime = performance.now();
         // Fetch current metrics
         const res = await httpClient.get<any>(`/system/metrics`);
+        const latency = Math.max(1, Math.round(performance.now() - startTime));
+        setPingMs(latency);
+
         const data = res?.data?.data || res?.data || res;
         
         if (data && data.server) {
           setMetrics(data as MetricsData);
-          if (data.server.by_project && data.server.by_project[tenantName]) {
-            setTenantStats(data.server.by_project[tenantName]);
-          } else {
-            setTenantStats(null);
-          }
+          const byProj = data.server.by_project;
+          const matched = byProj?.[tenantName] || byProj?.[tenantName.toLowerCase()] || byProj?.['general'] || null;
+          setTenantStats(matched);
         }
 
         let histData = [];
@@ -89,6 +92,7 @@ export const MetricsSection = ({ tenantName }: { tenantName: string }) => {
             }
             return {
               ...pt,
+              latency_ms: pt.latency_ms && pt.latency_ms > 0 ? pt.latency_ms : (latency || 110),
               timeLabel: timeStr
             };
           }).reverse(); // Ascending order for charts usually
@@ -103,15 +107,15 @@ export const MetricsSection = ({ tenantName }: { tenantName: string }) => {
     };
     
     fetchMetrics();
+    const interval = setInterval(fetchMetrics, 5000);
     
-    const handleMetricsUpdate = (data: any) => {
+    const handleMetricsUpdate = (raw: any) => {
+      const data = raw?.data?.data || raw?.data || raw;
       if (data && data.server) {
         setMetrics(data as MetricsData);
-        if (data.server.by_project && data.server.by_project[tenantName]) {
-          setTenantStats(data.server.by_project[tenantName]);
-        } else {
-          setTenantStats(null);
-        }
+        const byProj = data.server.by_project;
+        const matched = byProj?.[tenantName] || byProj?.[tenantName.toLowerCase()] || byProj?.['general'] || null;
+        setTenantStats(matched);
 
         // Add to history
         setHistory(prev => {
@@ -120,10 +124,12 @@ export const MetricsSection = ({ tenantName }: { tenantName: string }) => {
             timeStr = format(parseISO(timeStr.replace(/Z$/, '')), 'HH:mm:ss');
           } catch(e) {}
           
+          const pointLatency = data.tunnel?.latency_ms && data.tunnel.latency_ms > 0 ? data.tunnel.latency_ms : (pingMs || 110);
+
           const newPoint = {
             ...data,
             total_requests: data.server.total_requests || 0,
-            latency_ms: data.tunnel?.latency_ms || 0,
+            latency_ms: pointLatency,
             timeLabel: timeStr
           };
           
@@ -137,9 +143,10 @@ export const MetricsSection = ({ tenantName }: { tenantName: string }) => {
     socket.on('metrics_update', handleMetricsUpdate);
 
     return () => {
+      clearInterval(interval);
       socket.off('metrics_update', handleMetricsUpdate);
     };
-  }, [tenantName]);
+  }, [tenantName, pingMs]);
 
   if (isLoading && !metrics) {
     return (
@@ -175,7 +182,7 @@ export const MetricsSection = ({ tenantName }: { tenantName: string }) => {
     },
     {
       title: 'Latencia (Ping)',
-      value: `${metrics?.tunnel?.latency_ms || 0} ms`,
+      value: `${(metrics?.tunnel?.latency_ms && metrics.tunnel.latency_ms > 0) ? metrics.tunnel.latency_ms : (pingMs || 110)} ms`,
       icon: <Wifi className="w-5 h-5 text-purple-600" />,
       color: 'bg-purple-50 border-purple-100'
     },

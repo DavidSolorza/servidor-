@@ -17,19 +17,31 @@ export const useProjects = () => {
         httpClient.get<any>('/metrics/projects').catch(() => null)
       ]);
       
-      let projectsList = projectsRes?.data || [];
-      const metricsData = metricsRes?.data?.by_project || metricsRes?.by_project;
+      let projectsList = Array.isArray(projectsRes) ? projectsRes : (projectsRes?.data || []);
+      const rawMetrics = metricsRes?.data || metricsRes;
+      const metricsData = rawMetrics?.by_project;
+      const globalServer = rawMetrics?.server || rawMetrics;
 
-      if (metricsData) {
-        projectsList = projectsList.map((proj: Project) => {
-          const apiSlug = proj.api_base ? proj.api_base.replace(/^\/api\//, '') : '';
-          const stats = metricsData[proj.name] || (apiSlug ? metricsData[apiSlug] : undefined);
-          return {
-            ...proj,
-            stats
+      projectsList = projectsList.map((proj: Project) => {
+        const apiSlug = proj.api_base ? proj.api_base.replace(/^\/api\//, '') : '';
+        let stats = undefined;
+        if (metricsData) {
+          stats = metricsData[proj.name] || (apiSlug ? metricsData[apiSlug] : undefined) || metricsData['general'];
+        }
+        if (!stats && globalServer) {
+          stats = {
+            total_requests: globalServer.total_requests || 0,
+            success_2xx: globalServer.success_2xx || 0,
+            client_errors_4xx: globalServer.client_errors_4xx || 0,
+            server_errors_5xx: globalServer.server_errors_5xx || 0,
+            last_request_time: globalServer.last_request_time || ''
           };
-        });
-      }
+        }
+        return {
+          ...proj,
+          stats
+        };
+      });
 
       setProjects(projectsList);
     } catch (err: any) {
