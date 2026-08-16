@@ -16,7 +16,19 @@ const SOCKET_URL = getSocketUrl();
 
 export const socket: Socket = io(SOCKET_URL, {
   transports: ['websocket', 'polling'], // Fallback support
-  autoConnect: true
+  autoConnect: true,
+  // 1. Falta de Autenticación:
+  // Si tu backend requiere el token para WebSockets, envíalo aquí.
+  auth: {
+    token: config.API_TOKEN
+  },
+  extraHeaders: {
+    Authorization: `Bearer ${config.API_TOKEN}`
+  }
+  // 2. Problema de Rutas (Reverse Proxy):
+  // Si Nginx/Apache solo redirige "/api" al backend, la ruta por defecto "/socket.io" fallará.
+  // Descomenta y ajusta la siguiente línea si ese es el caso:
+  // path: '/api/socket.io'
 });
 
 socket.on('connect', () => {

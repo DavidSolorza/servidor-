@@ -1,6 +1,10 @@
 export interface Project {
   name: string;
-  db_file: string;
+  title?: string;
+  description?: string;
+  database_type?: string;
+  api_base?: string;
+  db_file?: string;
   tables_url: string;
   stats?: {
     total_requests: number;
@@ -14,3 +18,4 @@ export interface Project {
 export interface ProjectsResponse {
   data: Project[];
 }
+

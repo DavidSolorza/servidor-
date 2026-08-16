@@ -22,13 +22,19 @@ Retorna los metadatos de los proyectos (tenants) registrados en el servidor.
   "data": [
     {
       "name": "agromap",
-      "db_file": "agromap/agromap.db",
+      "title": "AgroMap",
+      "description": "Sistema de gestión agrícola, sectores, asociadas y visitas",
+      "database_type": "SQLite",
+      "api_base": "/api/agromap",
       "tables_url": "/api/agromap/data"
     },
     {
-      "name": "proyecto_a",
-      "db_file": "proyecto_a.db",
-      "tables_url": "/api/proyecto_a/data"
+      "name": "proyecto_b",
+      "title": "Bitácora de Mantenimiento Vehicular",
+      "description": "Gestión de vehículos, salud de componentes, categorías y registros de mantenimiento",
+      "database_type": "PostgreSQL",
+      "api_base": "/api/mantenimiento",
+      "tables_url": "/api/proyecto_b/data"
     }
   ]
 }

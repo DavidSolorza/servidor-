@@ -13,7 +13,7 @@ interface LogEntry {
   details?: string;
 }
 
-export const LogsSection = ({ tenantName: _tenantName }: { tenantName: string }) => {
+export const LogsSection = ({ tenantName }: { tenantName: string }) => {
   const [filter, setFilter] = useState<'all' | 'info' | 'warn' | 'error' | 'debug'>('all');
   const [search, setSearch] = useState('');
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -25,7 +25,8 @@ export const LogsSection = ({ tenantName: _tenantName }: { tenantName: string })
       try {
         const queryParams = new URLSearchParams();
         if (filter !== 'all') queryParams.append('level', filter);
-        if (search) queryParams.append('search', search);
+        const searchQuery = search || tenantName;
+        if (searchQuery) queryParams.append('search', searchQuery);
         queryParams.append('limit', '100');
 
         const res = await httpClient.get<any>(`/logs?${queryParams.toString()}`);

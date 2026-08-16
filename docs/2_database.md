@@ -10,9 +10,12 @@ La API central devuelve una lista de proyectos que actúan como "Tenants" (Bases
 
 | Nombre de Columna | Tipo de Datos Exacto | Restricciones | Regla de Negocio / Descripción Detallada |
 | :--- | :--- | :--- | :--- |
-| `name` | `VARCHAR(255)` | `PRIMARY KEY, NOT NULL` | Nombre único que identifica el proyecto/tenant (ej. `agromap`). |
-| `db_file` | `VARCHAR(255)` | `NOT NULL` | Ruta relativa del archivo físico de la base de datos (ej. `agromap/agromap.db`). |
-| `tables_url` | `VARCHAR(255)` | `NOT NULL` | URL relativa para inspeccionar las tablas de este tenant. |
+| `name` | `VARCHAR(255)` | `PRIMARY KEY, NOT NULL` | Nombre/identificador del proyecto (ej. `agromap`, `proyecto_b`). |
+| `title` | `VARCHAR(255)` | `NOT NULL` | Título legible de la aplicación (ej. `Bitácora de Mantenimiento Vehicular`). |
+| `description` | `TEXT` | `NULLABLE` | Descripción de la funcionalidad y contexto del proyecto. |
+| `database_type` | `VARCHAR(50)` | `NOT NULL` | Motor de persistencia del proyecto (ej. `SQLite`, `PostgreSQL`). |
+| `api_base` | `VARCHAR(255)` | `NOT NULL` | Prefijo de ruta base para la API del tenant (ej. `/api/mantenimiento`). |
+| `tables_url` | `VARCHAR(255)` | `NOT NULL` | URL relativa para inspeccionar el esquema de tablas. |
 
 ---
 

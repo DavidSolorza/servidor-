@@ -6,6 +6,7 @@ interface SchemaData {
   database_type?: string;
   project?: string;
   tables?: string[];
+  title?: string;
 }
 
 export const TablesSection = ({ tenantName }: { tenantName: string }) => {
@@ -87,7 +88,7 @@ export const TablesSection = ({ tenantName }: { tenantName: string }) => {
           <Database className="w-10 h-10 text-slate-400" />
         </div>
         <h3 className="text-xl font-bold text-slate-800 mb-2">Sin tablas disponibles</h3>
-        <p className="text-slate-500 max-w-md">No se encontraron tablas para este tenant o hubo un problema al obtener el esquema de la base de datos.</p>
+        <p className="text-slate-500 max-w-md">No se encontraron tablas para el proyecto {tenantName} ({schema?.title || tenantName}) o la base de datos está vacía.</p>
       </div>
     );
   }
@@ -95,10 +96,15 @@ export const TablesSection = ({ tenantName }: { tenantName: string }) => {
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-          <TableIcon className="w-6 h-6 text-blue-600" />
-          Explorador de Datos
-        </h2>
+        <div>
+          <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+            <TableIcon className="w-6 h-6 text-blue-600" />
+            Explorador de Datos {schema.title ? `• ${schema.title}` : ''}
+          </h2>
+          {schema.database_type && (
+            <span className="text-xs text-slate-500 font-medium ml-8">Motor: {schema.database_type}</span>
+          )}
+        </div>
         
         <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
           <div className="relative w-full sm:w-64">

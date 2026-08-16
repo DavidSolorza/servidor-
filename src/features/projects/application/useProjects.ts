@@ -21,10 +21,14 @@ export const useProjects = () => {
       const metricsData = metricsRes?.data?.by_project || metricsRes?.by_project;
 
       if (metricsData) {
-        projectsList = projectsList.map((proj: Project) => ({
-          ...proj,
-          stats: metricsData[proj.name] || undefined
-        }));
+        projectsList = projectsList.map((proj: Project) => {
+          const apiSlug = proj.api_base ? proj.api_base.replace(/^\/api\//, '') : '';
+          const stats = metricsData[proj.name] || (apiSlug ? metricsData[apiSlug] : undefined);
+          return {
+            ...proj,
+            stats
+          };
+        });
       }
 
       setProjects(projectsList);
