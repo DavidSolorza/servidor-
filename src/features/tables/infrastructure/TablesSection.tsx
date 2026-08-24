@@ -82,10 +82,33 @@ export const TablesSection = ({ tenantName }: { tenantName: string }) => {
         }
       }
 
+      // Filter schema tables according to project domain if shared database contains mixed tables
+      if (foundSchema && Array.isArray(foundSchema.tables)) {
+        const isClientPortal = 
+          tenantName.toLowerCase().includes('client') || 
+          tenantName.toLowerCase().includes('portal') ||
+          targetSlug.toLowerCase().includes('client') ||
+          targetSlug.toLowerCase().includes('portal');
+
+        if (isClientPortal) {
+          const filteredTables = foundSchema.tables.filter(t => 
+            !t.toLowerCase().startsWith('maintenance') && 
+            !t.toLowerCase().startsWith('vehicle')
+          );
+          if (filteredTables.length > 0) {
+            foundSchema = {
+              ...foundSchema,
+              tables: filteredTables
+            };
+          }
+        }
+      }
+
       setActiveSlug(targetSlug);
       setSchema(foundSchema);
       if (foundSchema?.tables && foundSchema.tables.length > 0) {
-        setSelectedTable(foundSchema.tables[0]);
+        const defaultTable = foundSchema.tables.includes('projects') ? 'projects' : foundSchema.tables[0];
+        setSelectedTable(defaultTable);
       } else {
         setSelectedTable(null);
       }
