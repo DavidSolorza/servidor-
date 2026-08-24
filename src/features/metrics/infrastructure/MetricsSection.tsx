@@ -69,7 +69,13 @@ export const MetricsSection = ({ tenantName }: { tenantName: string }) => {
         if (data && data.server) {
           setMetrics(data as MetricsData);
           const byProj = data.server.by_project;
-          const matched = byProj?.[tenantName] || byProj?.[tenantName.toLowerCase()] || byProj?.['general'] || null;
+          const altName = tenantName === 'portal-clientes' ? 'client-portal' : tenantName === 'client-portal' ? 'portal-clientes' : tenantName;
+          const matched = byProj?.[tenantName] || 
+                          byProj?.[tenantName.toLowerCase()] || 
+                          byProj?.[altName] || 
+                          byProj?.[altName.toLowerCase()] ||
+                          byProj?.[tenantName.replace('-', '_')] ||
+                          byProj?.['general'] || null;
           setTenantStats(matched);
         }
 
@@ -114,7 +120,13 @@ export const MetricsSection = ({ tenantName }: { tenantName: string }) => {
       if (data && data.server) {
         setMetrics(data as MetricsData);
         const byProj = data.server.by_project;
-        const matched = byProj?.[tenantName] || byProj?.[tenantName.toLowerCase()] || byProj?.['general'] || null;
+        const altName = tenantName === 'portal-clientes' ? 'client-portal' : tenantName === 'client-portal' ? 'portal-clientes' : tenantName;
+        const matched = byProj?.[tenantName] || 
+                        byProj?.[tenantName.toLowerCase()] || 
+                        byProj?.[altName] || 
+                        byProj?.[altName.toLowerCase()] ||
+                        byProj?.[tenantName.replace('-', '_')] ||
+                        byProj?.['general'] || null;
         setTenantStats(matched);
 
         // Add to history

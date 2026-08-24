@@ -23,6 +23,7 @@ export const httpClient = {
         'Accept': 'application/json',
         'Cache-Control': 'no-cache',
         'Authorization': `Bearer ${config.API_TOKEN}`,
+        'X-API-Key': config.API_TOKEN,
       },
     });
 
@@ -47,6 +48,7 @@ export const httpClient = {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
         'Authorization': `Bearer ${config.API_TOKEN}`,
+        'X-API-Key': config.API_TOKEN,
       },
       body: body ? JSON.stringify(body) : undefined,
     });

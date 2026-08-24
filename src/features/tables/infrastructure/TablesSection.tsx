@@ -20,22 +20,78 @@ export const TablesSection = ({ tenantName }: { tenantName: string }) => {
   // Paginación
   const [page, setPage] = useState(1);
   const rowsPerPage = 10;
+  const [activeSlug, setActiveSlug] = useState<string>(tenantName);
 
   useEffect(() => {
     const fetchSchema = async () => {
-      try {
-        const res = await httpClient.get<any>(`/${tenantName}/data`);
-        const schemaData = res?.data || res;
-        setSchema(schemaData);
-        if (schemaData?.tables?.length > 0) {
-          setSelectedTable(schemaData.tables[0]);
+      setIsLoadingSchema(true);
+      
+      // Determine possible slug candidates (e.g. portal-clientes vs client-portal)
+      const slugCandidates = [tenantName];
+      if (tenantName === 'portal-clientes') slugCandidates.push('client-portal');
+      if (tenantName === 'client-portal') slugCandidates.push('portal-clientes');
+
+      let foundSchema: SchemaData | null = null;
+      let targetSlug = tenantName;
+
+      for (const slug of slugCandidates) {
+        try {
+          const res = await httpClient.get<any>(`/${slug}/data`);
+          const schemaData = res?.data || res;
+          if (schemaData && Array.isArray(schemaData.tables)) {
+            foundSchema = schemaData;
+            targetSlug = slug;
+            break;
+          }
+        } catch (e) {
+          // Continue trying next candidate
         }
-      } catch (error) {
-        console.error('Error fetching schema', error);
-      } finally {
-        setIsLoadingSchema(false);
       }
+
+      // If candidates failed, try searching /projects for exact matching api_base or tables_url
+      if (!foundSchema) {
+        try {
+          const projectsRes = await httpClient.get<any>('/projects');
+          const projectsList = Array.isArray(projectsRes) ? projectsRes : (projectsRes?.data || []);
+          const proj = projectsList.find((p: any) => 
+            p.name === tenantName || 
+            p.name === 'client-portal' || 
+            p.name === 'portal-clientes' ||
+            p.api_base?.includes(tenantName) ||
+            p.tables_url?.includes(tenantName) ||
+            (tenantName.includes('portal') && (p.name.includes('portal') || p.api_base?.includes('portal')))
+          );
+
+          if (proj) {
+            let extractedSlug = proj.name;
+            if (proj.tables_url) {
+              extractedSlug = proj.tables_url.replace(/^\/api\//, '').replace(/\/data$/, '');
+            } else if (proj.api_base) {
+              extractedSlug = proj.api_base.replace(/^\/api\//, '');
+            }
+
+            const res = await httpClient.get<any>(`/${extractedSlug}/data`);
+            const schemaData = res?.data || res;
+            if (schemaData && Array.isArray(schemaData.tables)) {
+              foundSchema = schemaData;
+              targetSlug = extractedSlug;
+            }
+          }
+        } catch (err) {
+          console.error('Error discovering project schema from /projects', err);
+        }
+      }
+
+      setActiveSlug(targetSlug);
+      setSchema(foundSchema);
+      if (foundSchema?.tables && foundSchema.tables.length > 0) {
+        setSelectedTable(foundSchema.tables[0]);
+      } else {
+        setSelectedTable(null);
+      }
+      setIsLoadingSchema(false);
     };
+
     fetchSchema();
   }, [tenantName]);
 
@@ -45,18 +101,25 @@ export const TablesSection = ({ tenantName }: { tenantName: string }) => {
     const fetchTableData = async () => {
       setIsLoadingData(true);
       try {
-        const res = await httpClient.get<any>(`/${tenantName}/table/${selectedTable}`);
+        // First try standard route /api/{slug}/{tableName} per spec
+        const res = await httpClient.get<any>(`/${activeSlug}/${selectedTable}`);
         setTableData(Array.isArray(res) ? res : res?.data || []);
       } catch (error) {
-        console.error('Error fetching table data', error);
-        setTableData([]); // Fallback
+        // Fallback to /api/{slug}/table/{tableName} if backend uses table subpath
+        try {
+          const resFallback = await httpClient.get<any>(`/${activeSlug}/table/${selectedTable}`);
+          setTableData(Array.isArray(resFallback) ? resFallback : resFallback?.data || []);
+        } catch (err2) {
+          console.error('Error fetching table data', err2);
+          setTableData([]);
+        }
       } finally {
         setIsLoadingData(false);
       }
     };
     
     fetchTableData();
-  }, [tenantName, selectedTable]);
+  }, [activeSlug, selectedTable]);
 
   // Filtro y Paginación Local
   const filteredData = useMemo(() => {
